@@ -13,12 +13,12 @@
  * writing app.js a little simpler to work with.
  */
 
-var Engine = (function(global) {
+const Engine = (function(global) {
     /* Predefine the variables we'll be using within this scope,
      * create the canvas element, grab the 2D context for that canvas
      * set the canvas element's height/width and add it to the DOM.
      */
-    var doc = global.document,
+    let doc = global.document,
         win = global.window,
         canvas = doc.createElement('canvas'),
         ctx = canvas.getContext('2d'),
@@ -38,7 +38,7 @@ var Engine = (function(global) {
          * would be the same for everyone (regardless of how fast their
          * computer is) - hurray time!
          */
-        var now = Date.now(),
+        let now = Date.now(),
             dt = (now - lastTime) / 1000.0;
 
         /* Call our update/render functions, pass along the time delta to
@@ -66,6 +66,7 @@ var Engine = (function(global) {
         reset();
         lastTime = Date.now();
         main();
+
     }
 
     /* This function is called by main (our game loop) and itself calls all
@@ -78,8 +79,17 @@ var Engine = (function(global) {
      * on the entities themselves within your app.js file).
      */
     function update(dt) {
-        updateEntities(dt);
-        // checkCollisions();
+
+        if(!player.winner && player.charSelected && player.lives > 0){
+            updateEntities(dt);
+            checkCollisions();
+        }
+
+        if (player.winner && resetGame || ( player.lives === 0 && resetGame ) ) {
+            reset();
+        }
+
+
     }
 
     /* This is called by the update function and loops through all of the
@@ -90,10 +100,15 @@ var Engine = (function(global) {
      * render methods.
      */
     function updateEntities(dt) {
-        allEnemies.forEach(function(enemy) {
+        allEnemies.forEach(function(enemy, index, arr) {
             enemy.update(dt);
+
+            // Remove Enemies Out of Board from allEnemies Array - Optimize Performance
+            if (enemy.x > 500) arr.splice(index, 1);
         });
+
         player.update();
+
     }
 
     /* This function initially draws the "game level", it will then call
@@ -106,7 +121,7 @@ var Engine = (function(global) {
         /* This array holds the relative URL to the image used
          * for that particular row of the game level.
          */
-        var rowImages = [
+        let rowImages = [
                 'images/water-block.png',   // Top row is water
                 'images/stone-block.png',   // Row 1 of 3 of stone
                 'images/stone-block.png',   // Row 2 of 3 of stone
@@ -120,6 +135,10 @@ var Engine = (function(global) {
 
         // Before drawing, clear existing canvas
         ctx.clearRect(0,0,canvas.width,canvas.height);
+
+        // Insert Score on top of game board
+        ctx.font = "20px Georgia";
+        ctx.fillText('Score : '+player.score+'', 402, 40);
 
         /* Loop through the number of rows and columns we've defined above
          * and, using the rowImages array, draw the correct image for that
@@ -146,15 +165,53 @@ var Engine = (function(global) {
      * on your enemy and player entities within app.js
      */
     function renderEntities() {
-        /* Loop through all of the objects within the allEnemies array and call
+        /* Loop through all of the objects within the allEnemies, lives, gems arrays and player and call
          * the render function you have defined.
          */
         allEnemies.forEach(function(enemy) {
+            // console.log(enemy);
             enemy.render();
         });
 
+        lives.forEach(function(life) {
+            // console.log(life);
+            life.render();
+        });
+
+        gems.forEach(function(gem) {
+            // console.log(gem);
+            gem.render();
+        });
+
         player.render();
+
     }
+
+
+    /* This function does nothing but it could have been a good place to
+     * handle game reset states - maybe a new game menu or a game over screen
+     * those sorts of things. It's only called once by the init() method.
+     */
+    function lose(playerLives, lives) {
+        console.log(playerLives, lives);
+        // noop
+        player.lives --;
+        lives.splice(lives.length - 1);
+
+        if (player.lives > 0) {
+            console.log(playerLives, lives);
+            allEnemies = [];
+            gems = [];
+            player.x = 202;
+            player.y = 400;
+
+            return;
+        }
+        console.log(player.lives, lives);
+        showModal();
+
+    }
+
 
     /* This function does nothing but it could have been a good place to
      * handle game reset states - maybe a new game menu or a game over screen
@@ -162,6 +219,59 @@ var Engine = (function(global) {
      */
     function reset() {
         // noop
+        allEnemies = [];
+        gems = [];
+        player.x = 202;
+        player.y = 400;
+        player.score = 0;
+
+        if (player.lives === 0 || player.winner) {
+            player.lives = 3;
+            lives = [new Life(undefined, 0, 10, 20, 35), new Life(undefined, 20, 10, 20, 35), new Life(undefined, 40, 10, 20, 35)];
+        }
+
+        player.winner = false;
+        resetGame = false;
+    }
+
+    /* This function check and handle player collision with Enemies and Gems.
+    *  If collision with enemy .. player lose life and return to point 0 .. / if no lif
+    */
+    function checkCollisions() {
+
+        let playerLeft = Math.floor(player.x) + 17;
+        let playerRight = playerLeft + player.width - 34;
+        let playerTop = player.y + 62;
+        let playerBottom = playerTop + player.height - 86;
+
+        allEnemies.forEach(function(enemy){
+
+            let enemyLeft = Math.floor(enemy.x);
+            let enemyRight = enemyLeft + enemy.width;
+            let enemyTop = Math.floor(enemy.y) + 76;
+            let enemyBottom = enemyTop + enemy.height - 98;
+
+            if ( enemyLeft < playerRight && enemyRight > playerLeft && enemyTop < playerBottom && enemyBottom > playerTop ) {
+                lose(player.lives, lives);
+            }
+        });
+
+        // Check collision with Gems => Gem Collected
+        if(gems.length) {
+
+            let currentGem = gems[0];
+            let gemWidth = 60;
+            let gemHeight = 30;
+            let gemLeft = currentGem.randomX;
+            let gemRight = gemLeft + gemWidth;
+            let gemTop = currentGem.randomY + 30;
+            let gemBottom = gemTop + gemHeight;
+
+            if ( gemLeft < playerRight && gemRight > playerLeft && gemTop < playerBottom && gemBottom > playerTop ) {
+                gems.splice(0,1);
+                player.score += 50;
+            }
+        }
     }
 
     /* Go ahead and load all of the images we know we're going to need to
@@ -173,7 +283,15 @@ var Engine = (function(global) {
         'images/water-block.png',
         'images/grass-block.png',
         'images/enemy-bug.png',
-        'images/char-boy.png'
+        'images/heart.png',
+        'images/char-boy.png',
+        'images/char-cat-girl.png',
+        'images/char-horn-girl.png',
+        'images/char-pink-girl.png',
+        'images/char-princess-girl.png',
+        'images/gem-blue.png',
+        'images/gem-green.png',
+        'images/gem-orange.png'
     ]);
     Resources.onReady(init);
 
